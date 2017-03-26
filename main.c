@@ -18,8 +18,11 @@ shortparam表示短參數 longparam表示長參數 ｢他們對應同一個設�
 
 增加新的參數時，請記住更改MAXPARAM的值
 如果新的參數沒有簡寫，請設置簡寫和全寫相同
+
+第零個參數保留
+也許可以把 switchparam 和 otherparam 合併？
 *******************************************************************************/
-#define MAXSWITCHPARAM  3
+#define MAXSWITCHPARAM  4
 #define MAXOTHERPARAM   2
 struct{
     char * switchparamshort[MAXSWITCHPARAM];
@@ -29,9 +32,9 @@ struct{
     char * otherparamslong[MAXOTHERPARAM];
     int otheroption[MAXOTHERPARAM];
 }option = {
-"q"     ,"h"    ,"create",
-"quite" ,"help" ,"create",
-0       ,0      ,0      ,
+"","q"     ,"h"    ,"create",
+"","quite" ,"help" ,"create",
+0 ,0       ,0      ,0      ,
 //其他參數
 "of"    ,"w"    ,
 "offset","width",
@@ -81,9 +84,10 @@ int GetIntegerFromStr(char *str)
     return sum;
 }
 
-//該函數返回所需要設置的值
-//-1目前保留
-//-2錯誤
+//該函數返回所需要設置的值,or:
+//-1 set the option
+//-2 error param
+//-3 have set yet
 int AnalysetheParamete(char *param)
 {
     printf("[%-12s]\t",param);
@@ -95,11 +99,18 @@ int AnalysetheParamete(char *param)
             if(StringCompare(param+1,GetSwitchParamtesLong(i)) ||
                StringCompare(param+1,GetSwitchParamtesShort(i)))
             {
-                return i;
+                if(!IsOption(i))
+                {
+                    SetOption(i);
+                    return i;
+                }
+                else
+                {
+                    return -3;
+                }
             }
         }
         //unknow param
-        printf("false\n");
         return -2;
     }
     else
@@ -108,45 +119,31 @@ int AnalysetheParamete(char *param)
         //param is no head with '-' and '/'
         //支持新的參數類型，比如 offset=10 之類的設置
         for(int i=0;i<GetOtherParamMaxNum();i++){
-            int len;
-            len = strlen(GetOtherParamtesLong(i));
-            if(StringCompareHead(param,GetOtherParamtesLong(i),len)){
-                if(*(param+len)!='=')
-                {
-                    printf("'=' error\n");   
-                    return -2;
-                }
-                if(GetOption(i)!=0)
-                {
-                    printf("had set yet2\n");   
-                    return -2;
-                }
-                int num = GetIntegerFromStr(param+len+1);
-                SetOtherOption(num,i);
-                printf("(%d) successful!!\n",num);
-                return -1;
-            }
-            len = strlen(GetOtherParamtesShort(i));
-            if(StringCompareHead(param,GetOtherParamtesShort(i),len))
+            int len = 0;
+            if(len==0 && (len = strlen(GetOtherParamtesLong(i))) && 
+               !StringCompareHead(param,GetOtherParamtesLong(i),len))len = 0;
+            if(len==0 && (len = strlen(GetOtherParamtesShort(i))) && 
+               !StringCompareHead(param,GetOtherParamtesShort(i),len))len = 0;
+
+            if(len != 0)
             {
                 if(*(param+len)!='=')
                 {
-                    printf("'=' error\n");
+                    printf("'=' error ");   
                     return -2;
                 }
                 if(GetOption(i)!=0)
                 {
-                    printf("had set yet2\n");
-                    return -2;
+                    return -3;
                 }
+                //set the option
                 int num = GetIntegerFromStr(param+len+1);
                 SetOtherOption(num,i);
-                printf("(%d) successful!!\n",num);
+                printf("(%d) ",num);
                 return -1;
             }
         }
         //unknow param
-        printf("false\n");
         return -2;
     }
 }
@@ -158,22 +155,41 @@ void AnalyseParametes(int argnum,char **arglist)
     for(int i=0;i<argnum;i++)
     {
         int set = AnalysetheParamete(arglist[i]);
-        if(set==-2 || set==-1)
+        if(set==-2)
         {
+            printf("false\n");
             continue;
         }
-        if(!IsOption(set))
+        if(set==-1)
         {
-            SetOption(set);
             printf("setsuccessful\n");
+            continue;
         }
-        else
+        if(set==-3)
         {
             printf("have set yet\n");
+            continue;
+        }
+        if(set>=0)
+        {
+            printf("successful\n");
+            continue;
         }
     }
 }
 
+#ifdef _DEBUG
+void OutputOption()
+{
+    for(int i=0;i<GetSwitchParamMaxNum();i++){
+        printf("[%d]",IsOption(i));
+    }
+    printf("\n");
+    for(int i=0;i<GetOtherParamMaxNum();i++){
+        printf("[%d] ",GetOption(i));
+    }
+    printf("\n");
+}
 void CheckOption()
 {
     if(IsOption(SWITCH_OPTION_QUITE)){
@@ -185,6 +201,7 @@ void CheckOption()
     if(IsOption(SWITCH_OPTION_CREATE)){
         printf("OPTION_CREATE\n");
     }
+    OutputOption();
 }
 
 void CheckAnalyseParametesEnter()
@@ -237,7 +254,6 @@ void CheckStringCompareHeadEnter(){
         CheckStringCompareHeadBegin(str1[i],str2[i],len[i]);
     }
 }
-
 void CheckGetIntegerFromStrBegin(char *str)
 {
     printf("[%-10s]\t",str);
@@ -260,6 +276,7 @@ void CheckGetIntegerFromStrEnter()
         CheckGetIntegerFromStrBegin(str[i]);
     }
 }
+#endif
 
 int main(int argc,char **argv)
 {
@@ -269,8 +286,6 @@ int main(int argc,char **argv)
     //CheckGetIntegerFromStrEnter();
     AnalyseParametes(argc-1,argv+1);
     CheckOption();
-    for(int i=0;i<GetSwitchParamMaxNum();i++){
-        printf("[%d]",GetOption(i));
-    }
+
     return 0;
 }
